@@ -1,3 +1,5 @@
+import subprocess
+
 from celery import chain
 from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException
@@ -9,6 +11,10 @@ from models import TaskRequest
 from tasks import celery_app, download_task, process_task, upload_and_cleanup_task
 
 app = FastAPI()
+
+
+def start_celery():
+    subprocess.Popen(["celery", "-A", "tasks", "worker", "--loglevel=info"])
 
 
 @app.post("/add_task/")

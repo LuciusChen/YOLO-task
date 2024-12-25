@@ -10,7 +10,14 @@ from redis import Redis
 from config import REDIS_HOST, REDIS_PORT
 from constants import message_translations
 from models import TaskRequest
-from tasks import celery_app, download_task, process_task, upload_and_cleanup_task
+from tasks import (
+    celery_app,
+    download_task,
+    failure_callback,
+    process_task,
+    success_callback,
+    upload_and_cleanup_task,
+)
 
 app = FastAPI()
 
@@ -46,9 +53,12 @@ def add_task(task: TaskRequest):
         )
 
     task_chain = chain(
-        download_task.s(task.file_path),
-        process_task.s(task.file_type, task.target_classes),
-        upload_and_cleanup_task.s(),
+        download_task.s(task.dict()),
+        process_task.s(),
+        upload_and_cleanup_task.s().set(
+            link=success_callback.s(),  # 成功回调任务
+            link_error=failure_callback.s(),  # 失败回调任务
+        ),
     )
 
     result = task_chain.apply_async()

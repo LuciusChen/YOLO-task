@@ -13,6 +13,7 @@ import aiohttp
 import cv2
 import numpy as np
 import oss2
+from celery import Celery, shared_task
 from fastapi import HTTPException
 from redis import Redis
 from ultralytics import YOLO
@@ -32,6 +33,7 @@ from config import (
     TEMP_DIR,
 )
 from constants import message_translations
+from models import TaskRequest
 from utils import convert_numpy_types, increment_path
 
 redis_conn = Redis(decode_responses=True)
@@ -39,7 +41,6 @@ model = YOLO("yolov8n.pt")
 auth = oss2.Auth(ACCESS_KEY_ID, ACCESS_KEY_SECRET)
 bucket = oss2.Bucket(auth, END_POINT, BUCKET_NAME, region=REGION)
 
-from celery import Celery
 
 # 初始化 Celery 实例
 celery_app = Celery("tasks", broker=CELERY_BROKER_URL)
@@ -57,41 +58,59 @@ celery_app.conf.update(
 
 
 @celery_app.task(bind=True, soft_time_limit=CELERY_SOFT_TIME_LIMIT)
-def download_task(self, file_path: str) -> str:
-    local_file_path = download_file_from_oss(file_path)
-    return local_file_path
+def download_task(self, task_data: dict) -> dict:
+    local_file_path = download_file_from_oss(task_data["file_path"])
+    task_data["local_file_path"] = local_file_path
+    return task_data
 
 
 @celery_app.task(bind=True, soft_time_limit=CELERY_SOFT_TIME_LIMIT)
-def process_task(
-    self, local_file_path: str, file_type: str, target_classes=None
-) -> dict:
+def process_task(self, task_data: dict) -> dict:
     result = process_yolo_task(
-        local_file_path, file_type, target_classes=target_classes
+        task_data["local_file_path"],
+        task_data["file_type"],
+        target_classes=task_data.get("target_classes", []),
     )
 
-    if result.get("class_counts"):
-        return result
+    task_data.update(result)
+
+    if task_data.get("class_counts"):
+        return task_data
     else:
-        result["stop_chain"] = "True"
-        return result
+        task_data["stop_chain"] = "True"
+        return task_data
 
 
 @celery_app.task(bind=True, soft_time_limit=CELERY_SOFT_TIME_LIMIT)
-def upload_and_cleanup_task(self, result: dict) -> dict:
+def upload_and_cleanup_task(self, task_data: dict) -> dict:
     try:
-        output_file_path = result["output_file_path"]
-        local_file_path = result["local_file_path"]
+        output_file_path = task_data["output_file_path"]
+        local_file_path = task_data["local_file_path"]
 
-        if "stop_chain" not in result:
+        if "stop_chain" not in task_data:
             oss_key = upload_file_to_oss(output_file_path)
-            result["oss_key"] = oss_key
+            task_data["oss_key"] = oss_key
 
         cleanup_files(local_file_path, output_file_path)
-        return result
+        return task_data
     except Exception as e:
         print(f"Error during upload and cleanup: {e}")
         raise
+
+
+@shared_task
+def success_callback(result):
+    # 在这里将成功结果写入数据库
+    # result 是任务链的最终结果
+    print("Success:", result)
+    # 数据库操作
+
+
+@shared_task
+def failure_callback(request, exc, traceback):
+    # 处理失败的结果
+    print("Failure:", exc)
+    # 数据库操作
 
 
 def cleanup_files(local_file_path: str, output_file_path: str) -> None:
@@ -187,17 +206,19 @@ def process_image_task(image_path: str, save_dir: str, target_classes=None) -> d
 def count_classes(classes: np.ndarray, names: dict) -> dict:
     class_counts = {}
     for cls in classes:
-        class_name = names[cls]
-        class_counts[class_name] = class_counts.get(class_name, 0) + 1
+        class_name = names[int(cls)]
+        if class_name not in class_counts:
+            class_counts[class_name] = {"count": 0, "index": int(cls)}
+        class_counts[class_name]["count"] += 1
     return class_counts
 
 
 def process_video_task(video_path: str, save_dir: str, target_classes=None) -> dict:
     try:
-        track_history = set()
+        track_history = defaultdict(set)
         counting_region = {
             "name": "YOLOv8 Full Frame Region",
-            "counts": defaultdict(int),
+            "counts": defaultdict(lambda: {"count": 0, "index": None}),
             "region_color": (255, 42, 4),
             "text_color": (255, 255, 255),
         }
@@ -238,12 +259,18 @@ def process_video_task(video_path: str, save_dir: str, target_classes=None) -> d
                     label = f"{track_id}: {names[cls]}"
                     annotator.box_label(box, label, color=colors(cls, True))
 
-                    if track_id not in track_history:
-                        track_history.add(track_id)
-                        counting_region["counts"][names[cls]] += 1
+                    class_name = names[cls]
+
+                    if track_id not in track_history[class_name]:
+                        track_history[class_name].add(track_id)
+                        counting_region["counts"][class_name]["count"] += 1
+                        counting_region["counts"][class_name]["index"] = int(cls)
 
             region_label = ", ".join(
-                [f"{cls}: {count}" for cls, count in counting_region["counts"].items()]
+                [
+                    f"{cls}: {info['count']}"
+                    for cls, info in counting_region["counts"].items()
+                ]
             )
             region_color = counting_region["region_color"]
             region_text_color = counting_region["text_color"]

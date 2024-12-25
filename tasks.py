@@ -26,8 +26,10 @@ from config import (
     CELERY_BROKER_URL,
     CELERY_RESULT_BACKEND,
     CELERY_SOFT_TIME_LIMIT,
+    DEFAULT_SAVE_DIR,
     END_POINT,
     REGION,
+    TEMP_DIR,
 )
 from constants import message_translations
 from utils import convert_numpy_types, increment_path
@@ -61,8 +63,12 @@ def download_task(self, file_path: str) -> str:
 
 
 @celery_app.task(bind=True, soft_time_limit=CELERY_SOFT_TIME_LIMIT)
-def process_task(self, local_file_path: str, file_type: str) -> dict:
-    result = process_yolo_task(local_file_path, file_type)
+def process_task(
+    self, local_file_path: str, file_type: str, target_classes=None
+) -> dict:
+    result = process_yolo_task(
+        local_file_path, file_type, target_classes=target_classes
+    )
 
     if result.get("class_counts"):
         return result
@@ -94,7 +100,7 @@ def cleanup_files(local_file_path: str, output_file_path: str) -> None:
 
 
 def download_file_from_oss(file_path: str) -> str:
-    local_file_path = os.path.join("tmp", os.path.basename(file_path))
+    local_file_path = os.path.join(TEMP_DIR, os.path.basename(file_path))
     os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
 
     oss2.resumable_download(
@@ -124,23 +130,34 @@ def upload_file_to_oss(file_path: str) -> str:
     return oss_key
 
 
-def process_yolo_task(local_file_path: str, file_type: str, save_dir: str = "output/") -> dict:
+def process_yolo_task(
+    local_file_path: str,
+    file_type: str,
+    save_dir: str = DEFAULT_SAVE_DIR,
+    target_classes: list = [],
+) -> dict:
     if file_type.lower() == "image":
-        return process_image_task(local_file_path, save_dir)
+        return process_image_task(local_file_path, save_dir, target_classes)
     elif file_type.lower() == "video":
-        return process_video_task(local_file_path, save_dir)
+        return process_video_task(local_file_path, save_dir, target_classes)
     else:
         return {"error": message_translations["unsupported_file_type"]["zh"]}
 
 
-def process_image_task(image_path: str, save_dir: str) -> dict:
+def process_image_task(image_path: str, save_dir: str, target_classes=None) -> dict:
     try:
         image = cv2.imread(image_path)
         if image is None:
             return {"error": f"无法读取图片 {image_path}"}
 
         image_name = Path(image_path).stem
-        detection = model.predict(image, save=True, project=str(save_dir), name=image_name)
+        detection = model.predict(
+            image,
+            save=True,
+            project=str(save_dir),
+            name=image_name,
+            classes=target_classes,
+        )
         detections = detection[0]
 
         if hasattr(detections, "boxes") and hasattr(detections.boxes, "cls"):
@@ -175,7 +192,7 @@ def count_classes(classes: np.ndarray, names: dict) -> dict:
     return class_counts
 
 
-def process_video_task(video_path: str, save_dir: str) -> dict:
+def process_video_task(video_path: str, save_dir: str, target_classes=None) -> dict:
     try:
         track_history = set()
         counting_region = {
@@ -208,7 +225,7 @@ def process_video_task(video_path: str, save_dir: str) -> dict:
             if not success:
                 break
 
-            results = model.track(frame, persist=True)
+            results = model.track(frame, persist=True, classes=target_classes)
 
             if results[0].boxes.id is not None:
                 boxes = results[0].boxes.xyxy.cpu()

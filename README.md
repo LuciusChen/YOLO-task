@@ -20,6 +20,8 @@ curl -X POST "http://127.0.0.1:8000/add_task/" \
      -d '{"file_path": "sky/DJI_20241212151628_0004_V.JPG","file_type":"image"}'
 ```
 
+可选参数 `"target_classes":[0, 1, 2]`，传入需要特定识别的 classes。
+
 # getResult
 
 ``` shell
@@ -50,3 +52,7 @@ curl -X GET "http://127.0.0.1:8000/get_result/d5d39043-0b72-4a2c-b9be-ed1413fec3
     }
 }
 ```
+
+# GUI 访问
+
+默认是 `http://localhost:5555`

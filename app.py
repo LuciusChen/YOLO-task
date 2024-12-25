@@ -47,7 +47,7 @@ def add_task(task: TaskRequest):
 
     task_chain = chain(
         download_task.s(task.file_path),
-        process_task.s(task.file_type),
+        process_task.s(task.file_type, task.target_classes),
         upload_and_cleanup_task.s(),
     )
 

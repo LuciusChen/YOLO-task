@@ -23,10 +23,12 @@ cryptography==44.0.0
 cycler==0.12.1
 fastapi==0.115.6
 filelock==3.16.1
+flower==2.0.1
 fonttools==4.55.3
 frozenlist==1.5.0
 fsspec==2024.10.0
 h11==0.14.0
+humanize==4.11.0
 idna==3.10
 Jinja2==3.1.4
 jmespath==0.10.0
@@ -44,6 +46,7 @@ oss2==2.19.1
 packaging==24.2
 pandas==2.2.3
 pillow==11.0.0
+prometheus_client==0.21.1
 prompt_toolkit==3.0.48
 propcache==0.2.1
 psutil==6.1.0
@@ -67,6 +70,7 @@ starlette==0.41.3
 sympy==1.13.1
 torch==2.5.1
 torchvision==0.20.1
+tornado==6.4.2
 tqdm==4.67.1
 typing_extensions==4.12.2
 tzdata==2024.2

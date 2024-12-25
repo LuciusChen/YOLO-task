@@ -1,4 +1,6 @@
+import logging
 import subprocess
+import time
 
 from celery import chain
 from celery.result import AsyncResult
@@ -15,6 +17,24 @@ app = FastAPI()
 
 def start_celery():
     subprocess.Popen(["celery", "-A", "tasks", "worker", "--loglevel=info"])
+
+
+def start_flower():
+    subprocess.Popen(["celery", "-A", "tasks", "flower", "--port=5555"])
+
+
+def check_celery_ready():
+    logging.info("Checking if Celery is ready...")
+    while True:
+        try:
+            # Ping the Celery workers
+            response = celery_app.control.ping(timeout=1)
+            if response:
+                logging.info("Celery is ready.")
+                break
+        except Exception as e:
+            logging.error(f"Error checking Celery status: {e}")
+        time.sleep(1)  # Wait 1 second before the next check
 
 
 @app.post("/add_task/")

@@ -20,3 +20,5 @@ CELERY_SOFT_TIME_LIMIT = 10800
 
 DEFAULT_SAVE_DIR = "output/"
 TEMP_DIR = "tmp"
+
+YOLO_MODEL = "yolov8n.pt"

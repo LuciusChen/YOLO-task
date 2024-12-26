@@ -31,13 +31,14 @@ from config import (
     END_POINT,
     REGION,
     TEMP_DIR,
+    YOLO_MODEL,
 )
 from constants import message_translations
 from models import TaskRequest
 from utils import convert_numpy_types, increment_path
 
 redis_conn = Redis(decode_responses=True)
-model = YOLO("yolov8n.pt")
+model = YOLO(YOLO_MODEL)
 auth = oss2.Auth(ACCESS_KEY_ID, ACCESS_KEY_SECRET)
 bucket = oss2.Bucket(auth, END_POINT, BUCKET_NAME, region=REGION)
 

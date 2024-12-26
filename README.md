@@ -1,6 +1,7 @@
 # 启动
 
 ``` shell
+python -m venv ~/yolo-task
 source ~/yolo-task/bin/activate
 pip install -r requirements.txt
 python main.py

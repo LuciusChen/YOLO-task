@@ -146,6 +146,7 @@ def upload_file_to_oss(file_path: str) -> str:
         part_size=100 * 1024,
         num_threads=4,
     )
+
     return oss_key
 
 
@@ -234,6 +235,7 @@ def process_video_task(video_path: str, save_dir: str, target_classes=None) -> d
         save_dir = increment_path(Path(save_dir) / "exp", exist_ok=False)
         save_dir.mkdir(parents=True, exist_ok=True)
         video_writer_path = save_dir / f"{Path(video_path).stem}.mp4"
+        fourcc = cv2.VideoWriter_fourcc(*"H264")
         video_writer = cv2.VideoWriter(
             str(video_writer_path),
             fourcc,

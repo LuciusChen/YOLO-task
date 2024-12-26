@@ -1,7 +1,7 @@
 # 启动
 
 ``` shell
-source ~/yolo-task-api/bin/activate
+source ~/yolo-task/bin/activate
 pip install -r requirements.txt
 python main.py
 ```
